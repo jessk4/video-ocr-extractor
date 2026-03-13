@@ -1,50 +1,28 @@
-# 🎬 Video OCR Extractor v2.1
+# 🎬 Video OCR Extractor v3.0
 
-비디오의 특정 영역을 지정하여 초 단위로 텍스트/숫자를 추출하고 표로 저장하는 앱입니다.
+비디오 특정 영역의 숫자/텍스트를 프레임 단위로 추출하고, 사용자별 이력을 저장하는 앱.
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
 
 ---
 
-## ✨ 주요 기능
+## ✨ v3.0 신규 기능
 
-- 🎥 비디오 업로드 (MP4, MOV, AVI, WebM)
-- 🖱️ 드래그로 OCR 영역 선택 (캔버스 인터페이스)
-- 🔢 숫자 특화 OCR (LCD 디스플레이, 계기판 등)
-- 📊 결과를 **CSV / Excel / PDF / TSV** 로 내보내기
-- 🔍 실시간 전처리 미리보기
-
----
-
-## 🚀 Streamlit Cloud 배포 방법
-
-1. 이 레포를 GitHub에 Push
-2. [share.streamlit.io](https://share.streamlit.io) 접속
-3. **New app** → Repository 선택
-4. Main file path: `app.py`
-5. **Deploy** 클릭
+| 기능 | 설명 |
+|------|------|
+| 👤 사용자 관리 | 사용자 등록/로그인, 개인별 데이터 분리 |
+| 📋 추출 이력 저장 | SQLite DB에 세션별 전체 결과 영구 저장 |
+| 📁 파일 이력 목록 | CSV/Excel/PDF 내보내기 이력 목록 관리 |
+| 🔁 이력 재다운로드 | 과거 세션 결과를 언제든 재다운로드 |
+| 📊 사용자별 통계 | 세션수/추출행수/내보내기 현황 대시보드 |
 
 ---
 
-## 💻 로컬 실행
+## 🚀 Streamlit Cloud 배포
 
-```bash
-# 시스템 패키지 설치 (Ubuntu/Debian)
-sudo apt-get install tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng
-
-# Python 패키지 설치
-pip install -r requirements.txt
-
-# 앱 실행
-streamlit run app.py
-```
-
-### macOS
-```bash
-brew install tesseract tesseract-lang
-pip install -r requirements.txt
-streamlit run app.py
-```
+1. 레포 전체를 GitHub에 Push
+2. [share.streamlit.io](https://share.streamlit.io) → New app
+3. Main file path: `app.py` → Deploy
 
 ---
 
@@ -52,32 +30,24 @@ streamlit run app.py
 
 ```
 video-ocr-extractor/
-├── app.py                  # 메인 Streamlit 앱
+├── app.py                  # 메인 앱 (v3.0)
 ├── requirements.txt        # Python 패키지
-├── packages.txt            # 시스템 패키지 (Streamlit Cloud용)
+├── packages.txt            # 시스템 패키지 (Tesseract)
 ├── .streamlit/
-│   └── config.toml         # 테마 및 서버 설정
+│   └── config.toml         # 테마 설정
 └── README.md
 ```
 
----
-
-## ⚙️ OCR 설정 가이드
-
-| 설정 | 권장값 | 용도 |
-|------|--------|------|
-| 언어 | 영어 | 숫자 추출 시 정확도 높음 |
-| OCR 모드 | 숫자 위주 | 소수점·부호 포함 숫자 |
-| 이미지 확대 | 3× | 작은 글씨 인식률 향상 |
-| 전처리 | 반전+대비 | 밝은 LCD 디스플레이 |
+> `ocr_history.db` — 앱 실행 중 자동 생성되는 SQLite DB (이력 저장)
 
 ---
 
-## 📦 사용 라이브러리
+## 💻 로컬 실행
 
-- [Streamlit](https://streamlit.io) — UI 프레임워크  
-- [OpenCV](https://opencv.org) — 비디오 프레임 추출  
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) — 문자 인식 엔진  
-- [streamlit-drawable-canvas](https://github.com/andfanilo/streamlit-drawable-canvas) — 영역 선택  
-- [openpyxl](https://openpyxl.readthedocs.io) — Excel 생성  
-- [fpdf2](https://py-fpdf2.readthedocs.io) — PDF 생성  
+```bash
+# Ubuntu/Debian
+sudo apt-get install tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng
+
+pip install -r requirements.txt
+streamlit run app.py
+```
