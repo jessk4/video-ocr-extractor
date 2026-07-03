@@ -1,5 +1,5 @@
 """
-Video OCR Extractor v3.0
+Video OCR Extractor v4.0
 - 사용자별 추출 이력 저장 (SQLite)
 - CSV / Excel / PDF 파일 이력 목록
 - 탭 구조: 추출 / 이력 / 사용자 관리
@@ -23,7 +23,7 @@ from fpdf import FPDF
 # PAGE CONFIG
 # ══════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Video OCR Extractor v3.0",
+    page_title="Video OCR Extractor v4.0",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -315,7 +315,7 @@ def build_pdf(results, video_name="", username=""):
             self.rect(0,0,297,210,'F')
             self.set_font("Helvetica","B",13)
             self.set_text_color(0,212,255)
-            self.cell(0,8,"VIDEO OCR EXTRACTOR v3.0 - Results",ln=True)
+            self.cell(0,8,"VIDEO OCR EXTRACTOR v4.0 - Results",ln=True)
             self.set_font("Helvetica","",8)
             self.set_text_color(90,96,114)
             info = f"User: {username}  |  Video: {video_name}  |  Rows: {len(results)}  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -353,7 +353,7 @@ st.markdown("""
     <p class="hdr-title">VIDEO OCR EXTRACTOR</p>
     <p class="hdr-sub">영역 선택 → 프레임 캡처 → 숫자 추출 → 이력 저장</p>
   </div>
-  <div class="ver-tag">v3.0</div>
+<div class="ver-tag">v4.0</div>
 </div>
 """, unsafe_allow_html=True)
 
