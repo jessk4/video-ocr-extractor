@@ -1,5 +1,5 @@
 """
-Video OCR Extractor v3.0
+Video OCR Extractor v4.0
 - 사용자별 추출 이력 저장 (SQLite)
 - CSV / Excel / PDF 파일 이력 목록
 - 탭 구조: 추출 / 이력 / 사용자 관리
@@ -23,11 +23,14 @@ from fpdf import FPDF
 # PAGE CONFIG
 # ══════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Video OCR Extractor v3.0",
+    page_title="Video OCR Extractor v4.0",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# 최대 업로드 용량을 10GB로 확장
+st.set_option("server.maxUploadSize", 10240)
 
 # ══════════════════════════════════════════════════════════
 # DATABASE  (SQLite — persists while container is alive)
