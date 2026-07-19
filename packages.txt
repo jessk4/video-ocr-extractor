@@ -1,3 +1,4 @@
 tesseract-ocr
 tesseract-ocr-kor
 tesseract-ocr-eng
+fonts-nanum
