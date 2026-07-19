@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import cv2
 import numpy as np
@@ -8,10 +9,38 @@ import os
 import io
 import time
 from PIL import Image, ImageEnhance, ImageFilter
+
+# ─────────────────────────────────────────
+# COMPATIBILITY PATCH
+# streamlit-drawable-canvas는 Streamlit 1.41에서 제거된
+# streamlit.elements.image.image_to_url 을 참조하므로 셔밍(shim) 처리
+# ─────────────────────────────────────────
+try:
+    import streamlit.elements.image as _st_image_mod
+    if not hasattr(_st_image_mod, "image_to_url"):
+        from streamlit.elements.lib.image_utils import image_to_url as _image_to_url
+        _st_image_mod.image_to_url = _image_to_url
+except Exception:
+    pass
+
 from streamlit_drawable_canvas import st_canvas
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from fpdf import FPDF
+
+try:
+    from fpdf.enums import XPos, YPos
+    _LN = dict(new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+except Exception:  # 구버전 fpdf 폴백
+    _LN = dict(ln=True)
+
+# 한글 PDF용 폰트 탐색 (Streamlit Cloud: packages.txt에 fonts-nanum 필요)
+_KOREAN_FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "C:/Windows/Fonts/malgun.ttf",
+]
+KOREAN_FONT = next((p for p in _KOREAN_FONT_CANDIDATES if os.path.exists(p)), None)
 
 # ─────────────────────────────────────────
 # PAGE CONFIG
@@ -139,7 +168,7 @@ st.markdown("""
     <p class="app-sub">영역 선택 → 프레임 캡처 → 숫자/텍스트 추출 → 데이터 저장</p>
   </div>
   <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;
-              color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:3px 10px;">v2.1</div>
+              color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:3px 10px;">v2.2</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -225,7 +254,6 @@ def run_ocr(img_gray: np.ndarray, lang: str, mode: str, scale: int) -> tuple[str
         lines = [l.replace(' ', '') for l in raw.split('\n')]
         raw = '\n'.join(l for l in lines if any(c.isdigit() for c in l))
     elif mode == "num":
-        import re
         parts = re.findall(r'[\d.+\-eE/]+', raw)
         raw = '  '.join(p for p in parts if any(c.isdigit() for c in p))
 
@@ -354,38 +382,65 @@ with left_col:
         disp_w = 600
         disp_h = int(fh * disp_w / fw)
 
-        canvas_result = st_canvas(
-            fill_color="rgba(0, 212, 255, 0.08)",
-            stroke_width=2,
-            stroke_color="#00d4ff",
-            background_image=Image.fromarray(frame_img),
-            update_streamlit=True,
-            width=disp_w,
-            height=disp_h,
-            drawing_mode="rect",
-            key="canvas",
-        )
+        canvas_result = None
+        canvas_ok = True
+        try:
+            canvas_result = st_canvas(
+                fill_color="rgba(0, 212, 255, 0.08)",
+                stroke_width=2,
+                stroke_color="#00d4ff",
+                background_image=Image.fromarray(frame_img),
+                update_streamlit=True,
+                width=disp_w,
+                height=disp_h,
+                drawing_mode="rect",
+                key=f"canvas_{preview_sec}",
+            )
+        except Exception:
+            canvas_ok = False
 
-        # Parse region
-        if (canvas_result.json_data is not None and
-                canvas_result.json_data.get("objects")):
-            objs = canvas_result.json_data["objects"]
-            if objs:
-                last = objs[-1]
-                scale_x = fw / disp_w
-                scale_y = fh / disp_h
-                rx = int(last.get("left", 0) * scale_x)
-                ry = int(last.get("top", 0) * scale_y)
-                rw = int(last.get("width", 0) * scale_x)
-                rh = int(last.get("height", 0) * scale_y)
-                if rw > 10 and rh > 10:
-                    st.session_state.region = (rx, ry, rw, rh)
+        if canvas_ok and canvas_result is not None:
+            # Parse region
+            if (canvas_result.json_data is not None and
+                    canvas_result.json_data.get("objects")):
+                objs = canvas_result.json_data["objects"]
+                if objs:
+                    last = objs[-1]
+                    scale_x = fw / disp_w
+                    scale_y = fh / disp_h
+                    rx = int(last.get("left", 0) * scale_x)
+                    ry = int(last.get("top", 0) * scale_y)
+                    rw = int(last.get("width", 0) * scale_x)
+                    rh = int(last.get("height", 0) * scale_y)
+                    if rw > 10 and rh > 10:
+                        st.session_state.region = (rx, ry, rw, rh)
+        else:
+            # ── Fallback: 캔버스 사용 불가 시 수동 좌표 입력
+            st.warning("⚠️ 캔버스 컴포넌트를 사용할 수 없어 수동 좌표 입력으로 전환합니다.")
+            prev_r = st.session_state.region or (0, 0, min(200, fw), min(80, fh))
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            with mc1:
+                mx = st.number_input("X", min_value=0, max_value=max(fw - 1, 1), value=int(prev_r[0]), step=5)
+            with mc2:
+                my = st.number_input("Y", min_value=0, max_value=max(fh - 1, 1), value=int(prev_r[1]), step=5)
+            with mc3:
+                mw = st.number_input("W", min_value=1, max_value=fw, value=int(prev_r[2]), step=5)
+            with mc4:
+                mh = st.number_input("H", min_value=1, max_value=fh, value=int(prev_r[3]), step=5)
+            if mw > 10 and mh > 10:
+                st.session_state.region = (int(mx), int(my), int(mw), int(mh))
+            # 선택 영역을 프레임 위에 표시
+            marked = frame_img.copy()
+            rr = st.session_state.region
+            if rr:
+                cv2.rectangle(marked, (rr[0], rr[1]), (rr[0] + rr[2], rr[1] + rr[3]), (0, 212, 255), 3)
+            st.image(marked, caption="선택 영역 미리보기", width="stretch")
 
         # Region info
         r = st.session_state.region
         if r:
             c1, c2, c3, c4 = st.columns(4)
-            for col, lbl, val in zip([c1,c2,c3,c4], ["X","Y","W","H"], r):
+            for col, lbl, val in zip([c1, c2, c3, c4], ["X", "Y", "W", "H"], r):
                 with col:
                     st.markdown(f"""<div class="metric-card">
                         <div class="metric-val">{val}</div>
@@ -400,14 +455,14 @@ with left_col:
                 gray = preprocess(crop, prep)
                 bh, bw = gray.shape
                 big = cv2.resize(gray, (bw * int(scale), bh * int(scale)), interpolation=cv2.INTER_CUBIC)
-                st.image(big, caption=f"전처리 후 ({bw*scale}×{bh*scale}px)", use_column_width=True)
+                st.image(big, caption=f"전처리 후 ({bw*scale}×{bh*scale}px)", width="stretch")
         else:
             st.markdown('<div class="info-box">↑ 캔버스에서 OCR 영역을 드래그하여 선택하세요</div>',
                         unsafe_allow_html=True)
     else:
         st.markdown('<div class="info-box">← 비디오를 먼저 업로드하세요</div>',
                     unsafe_allow_html=True)
-        st.image("https://placehold.co/600x340/0f1117/252830?text=Video+Preview", use_column_width=True)
+        st.image("https://placehold.co/600x340/0f1117/252830?text=Video+Preview", width="stretch")
 
 
 with right_col:
@@ -424,11 +479,11 @@ with right_col:
         run_btn = st.button(
             "▶ OCR 추출 시작",
             disabled=not can_run,
-            use_container_width=True,
+            width="stretch",
             type="primary",
         )
     with col_clear:
-        if st.button("🗑 결과 초기화", use_container_width=True):
+        if st.button("🗑 결과 초기화", width="stretch"):
             st.session_state.results = []
             st.rerun()
 
@@ -504,7 +559,7 @@ with right_col:
                 # Live table update every 5 rows
                 if i % 5 == 0 and st.session_state.results:
                     df_live = pd.DataFrame(st.session_state.results[-20:])
-                    result_placeholder.dataframe(df_live[["타임코드","신뢰도(%)","추출값"]], use_container_width=True)
+                    result_placeholder.dataframe(df_live[["타임코드", "신뢰도(%)", "추출값"]], width="stretch")
 
             cap.release()
             prog_bar.progress(1.0, text=f"완료 — {len(st.session_state.results)}건 추출 ✓")
@@ -537,7 +592,7 @@ with right_col:
                 <div class="metric-lbl">높음 (≥70%)</div></div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True, height=340)
+        st.dataframe(df, width="stretch", height=340)
 
         # ── EXPORT BUTTONS ────────────────────
         st.markdown("**📦 내보내기**")
@@ -545,13 +600,13 @@ with right_col:
 
         # CSV
         with dl1:
-            csv_bytes = df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 "📄 CSV 저장",
                 data=csv_bytes,
                 file_name=f"ocr_{int(time.time())}.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
         # Excel
@@ -607,26 +662,51 @@ with right_col:
                 data=excel_buf.getvalue(),
                 file_name=f"ocr_{int(time.time())}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
             )
 
         # PDF
         with dl3:
             class PDF(FPDF):
+                """한글 지원 PDF (나눔고딕 등록, 폰트 없으면 라틴 문자로 대체)."""
+
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self.uni_font = None
+                    if KOREAN_FONT:
+                        try:
+                            self.add_font("KFont", "", KOREAN_FONT)
+                            self.uni_font = "KFont"
+                        except Exception:
+                            self.uni_font = None
+
+                def sf(self, style: str = "", size: int = 8):
+                    """유니코드 폰트가 있으면 사용, 없으면 Helvetica."""
+                    if self.uni_font:
+                        self.set_font(self.uni_font, "", size)
+                    else:
+                        self.set_font("Helvetica", style, size)
+
+                def safe(self, s: str) -> str:
+                    """유니코드 폰트가 없을 때 latin-1로 표현 불가한 문자를 ?로 대체."""
+                    if self.uni_font:
+                        return s
+                    return s.encode("latin-1", "replace").decode("latin-1")
+
                 def header(self):
                     self.set_fill_color(15, 17, 23)
                     self.rect(0, 0, 297, 210, 'F')
-                    self.set_font("Helvetica", "B", 14)
+                    self.sf("B", 14)
                     self.set_text_color(0, 212, 255)
-                    self.cell(0, 10, "VIDEO OCR EXTRACTOR - Results", ln=True)
-                    self.set_font("Helvetica", "", 8)
+                    self.cell(0, 10, "VIDEO OCR EXTRACTOR - Results", **_LN)
+                    self.sf("", 8)
                     self.set_text_color(90, 96, 114)
-                    self.cell(0, 6, f"Total: {len(results)} rows  |  Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+                    self.cell(0, 6, f"Total: {len(results)} rows  |  Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}", **_LN)
                     self.ln(2)
 
                 def footer(self):
                     self.set_y(-12)
-                    self.set_font("Helvetica", "", 7)
+                    self.sf("", 7)
                     self.set_text_color(90, 96, 114)
                     self.cell(0, 10, f"Page {self.page_no()}", align="R")
 
@@ -639,17 +719,20 @@ with right_col:
             widths = [35, 28, 25, 190]
             pdf.set_fill_color(0, 212, 255)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", "B", 8)
+            pdf.sf("B", 8)
             for col, w in zip(cols, widths):
-                pdf.cell(w, 8, col, border=1, align="C", fill=True)
+                pdf.cell(w, 8, pdf.safe(col), border=1, align="C", fill=True)
             pdf.ln()
 
             # Rows
             for i, row in enumerate(results):
                 fill = i % 2 == 0
-                pdf.set_fill_color(22, 25, 32) if fill else pdf.set_fill_color(15, 17, 23)
+                if fill:
+                    pdf.set_fill_color(22, 25, 32)
+                else:
+                    pdf.set_fill_color(15, 17, 23)
                 pdf.set_text_color(221, 225, 236)
-                pdf.set_font("Helvetica", "", 7)
+                pdf.sf("", 7)
                 vals = [
                     row["타임코드"],
                     str(row["시간(초)"]),
@@ -657,22 +740,23 @@ with right_col:
                     row["추출값"].replace('\n', ' / ')[:80],
                 ]
                 for val, w in zip(vals, widths):
-                    pdf.cell(w, 6, val, border=1, fill=fill)
+                    pdf.cell(w, 6, pdf.safe(val), border=1, fill=fill)
                 pdf.ln()
 
-            pdf_bytes = pdf.output(dest="S").encode("latin-1")
+            _out = pdf.output()
+            pdf_bytes = bytes(_out) if isinstance(_out, (bytes, bytearray)) else _out.encode("latin-1")
             st.download_button(
                 "📋 PDF 저장",
                 data=pdf_bytes,
                 file_name=f"ocr_{int(time.time())}.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
             )
 
         # Clipboard / TSV
         with dl4:
             tsv = "\n".join(
-                f"[{r['타임코드']}]\t{r['추출값'].replace(chr(10),' ')}"
+                f"[{r['타임코드']}]\t{r['추출값'].replace(chr(10), ' ')}"
                 for r in results
             )
             st.download_button(
@@ -680,7 +764,7 @@ with right_col:
                 data=tsv.encode("utf-8-sig"),
                 file_name=f"ocr_{int(time.time())}.tsv",
                 mime="text/tab-separated-values",
-                use_container_width=True,
+                width="stretch",
             )
 
     else:
